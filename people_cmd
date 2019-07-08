@@ -587,7 +587,7 @@ class Test(unittest.TestCase):
     def test_7_read_pickle_file(self):
         """Tests reading people's data from a Pickle file."""
 
-        print '\nName formatted content of: {0}\n'.format(self.json_file)
+        print '\nName formatted content of: {0}\n'.format(self.pickle_file)
 
         people = People(self.pickle_file)
         text = people.print_by_name()
