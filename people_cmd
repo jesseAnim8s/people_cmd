@@ -1,0 +1,596 @@
+#!/usr/bin/env python
+# coding=utf-8
+
+
+"""
+A python file for reading/writing/modifying general people info.
+    Stored in either JSON, or Pickle formats.
+
+Useage:
+    people_cmd: Will guide you step-by-step, through creating a file,
+        adding people's data to it, and printing out the info - in one of
+        two formats.
+    people_cmd -add -file <filename>: Will prompt you for user data to
+        add to the given file.
+    people -read -file <filename>: Will read and display the given file to you,
+        in one of two text formats: As a dictionary, or by names.
+    people -format: Prints the list of supported data serialization/de-
+        serialization formats.
+    people -test: Runs an extensive unit test over the given code.
+
+Note: To expand the list of supported formats to store data within,
+    update the following:
+
+    1.  Update the "valid_formats" variable, at the file's top.
+    2.  Update Prompt().add()
+    3.  Update Prompt().read()
+    4.  Update People().__init__()
+"""
+
+
+# Imports
+import argparse
+import json
+import os
+import pickle
+import re
+import sys
+import unittest
+
+
+# Variables
+__author__ = 'Jesse Carlson'
+__maintainer__ = 'Jesse Carlson'
+__email__ = 'seven6ty@hotmail.com'
+__date__ = 'July 8, 2019'
+__version__ = '0.0.1'
+__status__ = 'beta'
+
+
+valid_modes = ('create', 'add', 'read', 'exit')
+valid_formats = ('JSON', 'Pickle')
+valid_formats_str = '/'.join(valid_formats)
+valid_ext_str = '".' + '"/".'.join(valid_formats).lower() + '"'
+re_ext = '(' + ')|(.'.join(valid_formats).lower() + ')$'
+
+
+def main():
+    """Main executable."""
+
+    # Check for any arguments
+    if len(sys.argv) > 1:
+
+        # Parse arguments
+        parser = argparse.ArgumentParser()
+        parser.add_argument(
+            '-create', '-c',
+            help='Creates a new file',
+            action='store_true'
+        )
+        parser.add_argument(
+            '-add', '-a',
+            help='Add a new person\'s info',
+            action='store_true'
+        )
+        parser.add_argument(
+            '-read', '-r',
+            help='Reads a given file',
+            action='store_true'
+        )
+        parser.add_argument(
+            '-read_dict', '-rd',
+            help='Reads & prints a file as a dictionary',
+            action='store_true'
+        )
+        parser.add_argument(
+            '-read_name', '-rn',
+            help='Reads & prints a file as a list of alphabetized names',
+            action='store_true'
+        )
+        parser.add_argument(
+            '-file', '-f',
+            help='The file to read/write with',
+            type=str
+        )
+        parser.add_argument(
+            '-formats',
+            help='Lists the currently supported file formats',
+            action='store_true'
+        )
+        parser.add_argument(
+            '-test', '-t',
+            help='Used to run a unit test on the command',
+            action='store_true'
+        )
+        args = parser.parse_args()
+
+        # Run commands, based on the user's input
+        if args.create and not args.file:
+            Prompt().create()
+        elif args.create and args.file:
+            Prompt().create(args.file)
+        elif args.add and not args.file:
+            Prompt().add()
+        elif args.add and args.file:
+            Prompt().add(args.file)
+        elif args.read and not args.file:
+            Prompt().read()
+        elif args.read and args.file:
+            Prompt().read(args.file)
+        elif args.formats:
+            People().query_data_formats()
+        elif args.test:
+            del sys.argv[1:]
+            unittest.main()
+
+    # Otherwise, get user input, step-by-step
+    else:
+        Prompt().user()
+
+
+class Prompt(object):
+    """A collection of functions to prompt the user for input."""
+
+    def user(self):
+        """Prompts user for command options, one step at a time."""
+
+        # Prompt user for Mode
+        modes_str = '/'.join(valid_modes)
+        mode_prompt = '\n Which mode would you like to operate in? ({0}):\n> '
+        mode = raw_input(mode_prompt.format(modes_str))
+
+        # Error check Mode
+        if not isinstance(mode, basestring):
+            print '\n    Mode must be a string, ABORTING...\n'
+            return
+        mode = mode.strip().lower()
+        if mode not in valid_modes:
+            print '\n    A valid mode was not given, ABORTING...\n'
+        if mode not in valid_modes or mode == valid_modes[-1]:
+            return
+
+        # Create Mode
+        if mode == valid_modes[0]:
+            self.create()
+
+        # Add Mode
+        elif mode == valid_modes[1]:
+            self.add()
+
+        # Read Mode
+        elif mode == valid_modes[2]:
+            self.read()
+
+        # Exit Mode
+        elif mode == valid_modes[3]:
+            print '    Exiting'
+
+    def create(self, file_path=''):
+        """Prompts the user to create a file."""
+
+        # Error checking
+        if not file_path:
+            file_path_prompt = '\nEnter the {0} file path to create:\n> '
+            file_path = raw_input(file_path_prompt.format(valid_formats_str))
+        if not re.search(re_ext, file_path):
+            error_msg = '\n    Must specify a file ending in {0}, ABORTING.\n'
+            print (error_msg.format(valid_ext_str))
+            return False
+
+        # Create file
+        else:
+            people = People(file_path)
+            people.create_file()
+            return True
+
+    def add(self, file_path=''):
+        """Adds a person's data to a JSON/Pickle file of people."""
+
+        # Error checking
+        if not file_path or not os.path.exists(file_path):
+            file_prompt = '\nEnter the {0} file path to read:\n> '
+            file_path = raw_input(file_prompt.format(valid_formats_str))
+        if not os.path.exists(file_path):
+            print '\n    Specified file doesn\'t exist, ABORTING.\n'
+            return False
+        if not re.search(re_ext, file_path):
+            print ('\n    Must specify a file ending in {0}, '
+                   'ABORTING.\n'.format(valid_ext_str))
+            return False
+
+        # Add a new person's information
+        people = People(file_path)
+        new_person = Person()
+        new_person.input()
+        people.add_person(new_person)
+        # Write to the JSON/Pickle file
+        if re.search('.json', file_path):
+            people.write_json()
+        elif re.search('.pickle', file_path):
+            people.write_pickle()
+        # Prompt the user for the format, if it's not given
+        else:
+            format_prompt = (
+                ('\nWould you like to write in (1)JSON/(2)Pickle '
+                 'format? (1/2)\n> ')
+            )
+            format = raw_input(format_prompt)
+            if format == '1':
+                people.write_json()
+            elif format == '2':
+                people.write_pickle()
+
+    def read(self, file_path=''):
+        """Reads a given file and prints it's contents to the user."""
+
+        # Prompt user for file to read from, if it doesn't exist
+        if not file_path or not os.path.exists(file_path):
+            file_path = raw_input(
+                '\nEnter the {0} file path to read:\n> '.format(
+                    valid_formats_str
+                )
+            )
+        people = People(file_path)
+
+        # Prompt user for display format to use
+        format_prompt = (
+            '\nDisplay as (1) a dictionary, or (2), by name? (1/2)\n> '
+        )
+        format = raw_input(format_prompt)
+
+        # Read JSON/Pickle file
+        if re.search('.json$', file_path):
+            people.read_json()
+        elif re.search('.pickle$', file_path):
+            people.read_pickle()
+
+        # Print file info
+        if format == '1':
+            print '{}\n'.format(json.dumps(people.dict, indent=4))
+        elif format == '2':
+            print people.print_by_name()
+
+
+class Person(object):
+    """Class used to hold information for a person."""
+
+    def __init__(self, login='',
+                 first_name='', middle_name='', last_name='',
+                 id=0, phone='',
+                 address_street='',
+                 address_city='', address_state='',
+                 address_zip='', address_country='',
+                 existing_logins=[]):
+
+        super(Person, self).__init__()
+
+        self.login = login
+        self.name_first = first_name
+        self.name_middle = middle_name
+        self.name_last = last_name
+        self.id = id
+        self.phone = phone
+        self.address_street = address_street
+        self.address_city = address_city
+        self.address_state = address_state
+        self.address_zip = address_zip
+        self.address_country = address_country
+        self.existing_logins = existing_logins
+
+    def input(self):
+        """Prompts the user for a person's data to store."""
+
+        self.login = raw_input('Unique login name:\n> ')
+
+        # Error check login
+        if self.login in self.existing_logins:
+            print ''
+            return False
+
+        # Input the remaining data, if login is valid
+        self.name_first = raw_input('First name:\n> ')
+        self.name_middle = raw_input('Middle name//initial:\n> ')
+        self.name_last = raw_input('Last name:\n> ')
+        self.id = raw_input('User ID#:\n> ')
+        self.phone = raw_input('Phone #:\n> ')
+        self.address_street = raw_input('Street address:\n> ')
+        self.address_state = raw_input('State:\n> ')
+        self.address_zip = raw_input('ZIP code:\n> ')
+        self.address_country = raw_input('Country:\n> ')
+
+        return True
+
+
+class People(object):
+    """Class used to hold information for a group of people."""
+
+    def __init__(self, file_path=''):
+
+        super(People, self).__init__()
+
+        self.dict = {}
+
+        # Check for a given file path to use
+        if file_path and self.set_file_path(file_path):
+            # Try to construct a dictionary from the given file
+            if os.path.exists(file_path) and re.search('.json$', file_path):
+                try:
+                    self.dict = self.read_json()
+                except Exception as e:
+                    print 'Could not read the given file...'
+                    print e
+            if os.path.exists(file_path) and re.search('.pickle$', file_path):
+                try:
+                    self.dict = self.read_pickle()
+                except Exception as e:
+                    print 'Could not read the given file...'
+                    print e
+        else:
+            self.file_path = ''
+
+    def set_file_path(self, file_path=''):
+        """Checks, & sets, the current file path to read/write with."""
+
+        if (file_path
+                and isinstance(file_path, basestring)
+                and os.path.sep in file_path):
+            self.file_path = os.path.expanduser(file_path)
+            return self.file_path
+        else:
+            print 'No valid file was input, "{0}"'.format(file_path)
+            return False
+
+    def add_person(self, person=None):
+        """Adds a new person, & their data, to the dictionary."""
+
+        # Error checking
+        if not person or not isinstance(person, Person):
+            print '    Please provide a Person class object of data, ABORTING.'
+            return False
+        if person.login in self.dict:
+            print '    Login name already exists, ABORTING.'
+            return False
+
+        # Add a new dictionary entry
+        self.dict[person.login] = {
+            'name_first': person.name_first,
+            'name_middle': person.name_middle,
+            'name_last': person.name_last,
+            'id': person.id,
+            'phone': person.phone,
+            'address_street': person.address_street,
+            'address_city': person.address_city,
+            'address_state': person.address_state,
+            'address_zip': person.address_zip,
+            'address_country': person.address_country
+        }
+
+    def create_file(self):
+        """Creates a new file to store People data within."""
+
+        # Error check
+        if not self.file_path or os.path.sep not in self.file_path:
+            print '    A valid file path wasn\'t given, ABORTING.'
+            return False
+        if os.path.exists(self.file_path):
+            print 'The given file already exists, doing nothing.'
+            return False
+        if not re.search(re_ext, self.file_path):
+            print ('\n    Must specify a file ending in {0}, '
+                   'ABORTING.\n'.format(valid_ext_str))
+            return False
+
+        # Create a file path, if possible
+        try:
+            print '\nCreating a new file...'
+            file_handler = open(self.file_path, 'w')
+            file_handler.close()
+            print '    A new file has been created!...'
+            print '        {0}'.format(self.file_path)
+        except Exception as e:
+            print 'Error writing the file...'
+            print e
+
+    def read_json(self, file_path=''):
+        """Deserializes a JSON file, yielding a dictionary of People data."""
+
+        # Store & validate file path argument, if necessary
+        if file_path:
+            self.set_file_path(file_path)
+
+        # Open the file, read it, & deserialize it
+        if self.file_path:
+            with open(self.file_path, 'r') as file_handler:
+                file_text = file_handler.read()
+                if file_text:
+                    self.dict = json.loads(file_text)
+                else:
+                    self.dict = {}
+        else:
+            print '    The specified file doesn\'t exist, ABORTING.'
+
+        return self.dict
+
+    def read_pickle(self, file_path=''):
+        """Deserializes a Pickle file, yielding a dictionary of People data."""
+
+        # Store & validate file path argument, if necessary
+        if file_path:
+            self.set_file_path(file_path)
+
+        # Open the file, read it, & deserialize it
+        if self.file_path:
+            with open(self.file_path, 'rb') as file_handler:
+                try:
+                    self.dict = pickle.load(file_handler)
+                except EOFError:
+                    self.dict = {}
+        else:
+            print '    The specified file doesn\'t exist, ABORTING.'
+
+        return self.dict
+
+    def write_json(self):
+        """Serializes a JSON file, containing People data."""
+
+        if self.file_path:
+            print '\nWriting JSON file, "{0}"...'.format(self.file_path)
+            with open(self.file_path, 'w') as file_handler:
+                json.dump(self.dict, file_handler, indent=4, sort_keys=True)
+            print '     Done!'
+            return True
+
+    def write_pickle(self):
+        """Serializes a Pickle file, containing People data."""
+
+        if self.file_path:
+            print '\nWriting Pickle file, "{0}"...'.format(self.file_path)
+            with open(self.file_path, 'w') as file_handler:
+                pickle.dump(self.dict, file_handler)
+            print '     Done!'
+            return True
+
+    def print_by_name(self):
+        """All People data is printed, ordered by name, last, then first."""
+
+        names = []
+
+        for login in self.dict:
+            entry = self.dict[login]
+            name_str = (
+                entry['name_last'].upper() + ', ' + entry['name_first'] + ' ' +
+                entry['name_middle'][0] + '.\n' +
+                '    ID# ' + str(entry['id']) + ' Phone #' + entry['phone'] +
+                '\n    ' + entry['address_street'] + '\n' +
+                '    ' + entry['address_city'] + ', ' + entry['address_state'] +
+                entry['address_zip'] + '\n' +
+                '    ' + entry['address_country'] + '\n'
+            )
+            names.append(name_str)
+
+        return ''.join(sorted(names))
+
+    def query_data_formats(self):
+        """Lists the currently supported data import/export formats."""
+
+        print 'Currently supported formats are as follows:'
+        print '    {0}'.format(valid_ext_str)
+
+
+class Test(unittest.TestCase):
+    """A unit test that gets run when the test flag is passed to the command."""
+
+    # Files to create & destroy for testing
+    json_file = os.path.expanduser('~/.unittest.json')
+    pickle_file = os.path.expanduser('~/.unittest.pickle')
+
+    def test_0_create_json_file(self):
+        """Tests the creation of new JSON files."""
+
+        if os.path.exists(self.json_file):
+            os.remove(self.json_file)
+        people = People(self.json_file)
+        people.create_file()
+        self.assertTrue(os.path.exists(self.json_file))
+
+    def test_1_create_pickle_file(self):
+        """Tests the creation of new Pickle files."""
+
+        if os.path.exists(self.pickle_file):
+            os.remove(self.pickle_file)
+        people = People(self.pickle_file)
+        people.create_file()
+        self.assertTrue(os.path.exists(self.pickle_file))
+
+    def test_2_create_file_fail(self):
+        """Tries to create a file with an invalid file extension."""
+
+        invalid_file_ext = '~/something.something'
+
+        print '\nAttempting to create a file with an invalid file extension...'
+        print '    "{0}"'.format(invalid_file_ext)
+
+        people = People(invalid_file_ext)
+        self.assertFalse(people.create_file())
+
+    def test_3_add_json_person(self):
+        """Tests adding a person's information to an existing JSON file."""
+
+        print '\nAdding new people to the JSON file...'
+
+        new_person_1 = Person('doe', 'John', 'Michael', 'Doe',
+                              999, '818-214-6060',
+                              '101 Springway Crt',
+                              'Pasadena', 'CA', '91323',
+                              'USA')
+        new_person_2 = Person('jsmith', 'Jason', 'Bryan', 'Smith',
+                              1000, '626-422-2525',
+                              '4150 Dovetail St',
+                              'Los Angeles', 'CA', '90435',
+                              'USA')
+        people = People(self.json_file)
+        people.add_person(new_person_1)
+        people.add_person(new_person_2)
+        print '    New people added.'
+        self.assertTrue(people.write_json())
+
+    def test_4_add_pickle_person(self):
+        """Tests adding a person's information to an existing Pickle file."""
+
+        print '\nAdding new people to the Pickle file...'
+
+        new_person_1 = Person('doe', 'John', 'Nathan', 'Doe',
+                              999, '310-323-4545',
+                              '45 Rockefeller Way',
+                              'Paramount', 'CA', '93123',
+                              'USA')
+        new_person_2 = Person('pickford', 'Pickle', 'Benjamin', 'Person',
+                              1000, '604-310-3232',
+                              '3131 Hastings St',
+                              'Vancouver', 'BC',
+                              'Canada')
+        people = People(self.pickle_file)
+        people.add_person(new_person_1)
+        people.add_person(new_person_2)
+        print '    New people added.'
+        self.assertTrue(people.write_pickle())
+
+    def test_5_add_person_fail(self):
+        """Tries to add a person, using a login that already exists."""
+
+        print '\nAttempting to add a person with an invalid login'
+
+        new_person = Person('doe', 'Johnny', 'Maxwell', 'Doe',
+                            998, '911',
+                            '31 Carver Crt',
+                            'Seatle', 'WA',
+                            'US')
+        people = People(self.json_file)
+        self.assertFalse(people.add_person(new_person))
+
+    def test_6_read_json_file(self):
+        """Tests reading people's data from a JSON file."""
+
+        print '\nDictionary formatted content of: {0}\n'.format(self.json_file)
+
+        people = People(self.json_file)
+        people.read_json()
+        text = '{}\n'.format(json.dumps(people.dict, indent=4))
+        print text
+        self.assertTrue(text)
+        os.remove(self.json_file)
+
+    def test_7_read_pickle_file(self):
+        """Tests reading people's data from a Pickle file."""
+
+        print '\nName formatted content of: {0}\n'.format(self.json_file)
+
+        people = People(self.pickle_file)
+        print people.print_by_name()
+
+
+if __name__ == "__main__":
+    main()
+
+
+# End.
