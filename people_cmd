@@ -186,10 +186,13 @@ class Prompt(object):
     def add(self, file_path=''):
         """Adds a person's data to a JSON/Pickle file of people."""
 
+        file_path = os.path.expanduser(file_path)
+
         # Error checking
         if not file_path or not os.path.exists(file_path):
             file_prompt = '\nEnter the {0} file path to read:\n> '
             file_path = raw_input(file_prompt.format(valid_formats_str))
+            file_path = os.path.expanduser(file_path)
         if not os.path.exists(file_path):
             print '\n    Specified file doesn\'t exist, ABORTING.\n'
             return False
@@ -294,6 +297,7 @@ class Person(object):
         self.id = raw_input('User ID#:\n> ')
         self.phone = raw_input('Phone #:\n> ')
         self.address_street = raw_input('Street address:\n> ')
+        self.address_city = raw_input('City:\n> ')
         self.address_state = raw_input('State:\n> ')
         self.address_zip = raw_input('ZIP code:\n> ')
         self.address_country = raw_input('Country:\n> ')
@@ -463,7 +467,7 @@ class People(object):
                 '    ID# ' + str(entry['id']) + ' Phone #' + entry['phone'] +
                 '\n    ' + entry['address_street'] + '\n' +
                 '    ' + entry['address_city'] + ', ' + entry['address_state'] +
-                entry['address_zip'] + '\n' +
+                ' ' + entry['address_zip'] + '\n' +
                 '    ' + entry['address_country'] + '\n'
             )
             names.append(name_str)
@@ -586,7 +590,10 @@ class Test(unittest.TestCase):
         print '\nName formatted content of: {0}\n'.format(self.json_file)
 
         people = People(self.pickle_file)
-        print people.print_by_name()
+        text = people.print_by_name()
+        print text
+        self.assertTrue(text)
+        os.remove(self.pickle_file)
 
 
 if __name__ == "__main__":
